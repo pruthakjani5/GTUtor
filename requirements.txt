@@ -1,30 +1,16 @@
-# Core application dependencies
-streamlit>=1.31.0
-python-dotenv>=1.0.0
-
-# PDF processing
-pypdf>=3.17.1
-requests>=2.31.0
-
-# AI and database
-google-generativeai>=0.3.2
-chromadb>=0.4.22
-
-# Text processing and utilities
-markdown>=3.5.2
-clipboard>=0.0.4
-
-# Type hints support
-typing-extensions>=4.9.0
-
-# Optional dependencies for better performance
-numpy>=1.24.3
-pandas>=2.1.4
-
-# ChromaDB dependencies
-onnxruntime>=1.16.3
-tokenizers>=0.15.1
-sentence-transformers>=2.3.1
-
-# System utilities
-psutil>=5.9.8
+streamlit==1.37.0
+python-dotenv==1.0.1
+pypdf==4.3.1
+requests==2.32.3
+google-generativeai==0.7.2
+chromadb==0.5.5
+protobuf==4.25.4
+markdown==3.5.2
+clipboard==0.0.4
+typing-extensions==4.9.0
+numpy==1.23.0
+pandas==2.2.0
+onnxruntime==1.17.3
+tokenizers==0.15.2
+sentence-transformers==3.0.1
+psutil==5.9.8
