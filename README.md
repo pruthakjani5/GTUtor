@@ -17,7 +17,7 @@ GTUtor is an intelligent tutoring system specifically designed for Gujarat Techn
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/gtutor.git
+git clone https://github.com/pruthakjani5/GTUtor.git
 cd gtutor
 ```
 
