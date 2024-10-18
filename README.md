@@ -1,4 +1,3 @@
-# GTUtor
 # GTUtor: Dynamic Multi-Subject Chat System
 
 GTUtor is an intelligent tutoring system specifically designed for Gujarat Technological University (GTU) students. It combines the power of Google's Gemini Pro AI with a document-based knowledge system to provide accurate, context-aware responses across multiple subjects.
