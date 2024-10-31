@@ -37,6 +37,7 @@ pip install -r requirements.txt
 GEMINI_API_KEY=your_api_key_here
 ```
 
+If you do need a fresh setup without the trial database and previous chats then delete the "gtutor_data" folder, running app.py will create a new one.
 ## Required Dependencies
 
 - streamlit
