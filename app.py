@@ -203,14 +203,12 @@ def generate_answer(prompt: str):
             "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
             "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
         }
-        
         generation_config = {
             "temperature": 0.7,
             "top_p": 0.8,
             "top_k": 40,
             "max_output_tokens": 2048,
         }
-        
         result = model.generate_content(
             prompt,
             generation_config=generation_config,
@@ -318,6 +316,7 @@ if selected_subject:
     pdf_url = st.text_input(f"Or enter a PDF URL for {selected_subject}")
 
     if uploaded_file is not None:
+        # Removed for now
         # if uploaded_file.size > 10 * 1024 * 1024:  # 10MB limit
         #     st.error("File size exceeds 10MB limit. Please upload a smaller file.")
         # else:
