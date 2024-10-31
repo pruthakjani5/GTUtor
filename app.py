@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 from pypdf import PdfReader
+import shutil
 import os
 import google.generativeai as genai
 import chromadb
@@ -138,9 +139,15 @@ def make_rag_prompt(query: str, relevant_passages: List[str], subject: str, chat
     history_text = "\n".join([f"Human: {turn['human']}\nAssistant: {turn['ai']}" for turn in chat_history[-5:]])
     
     prompt = f"""You are GTUtor, a helpful and informative AI assistant specializing in {subject} for GTU (Gujarat Technological University) students.
-Answer the question using the reference passages below, your knowledge of {subject}, and the chat history provided and in a detailed and well-structured manner. Include all relevant information and specify the page numbers, line numbers, and PDF names where the information is found. If the answer requires additional knowledge beyond the provided context, clearly state this limitation and provide relevant information or insights using your knowledge. Do not provide incorrect information.
-* Maintain a formal and academic tone throughout your response which is also simple to understand and informative. Answer as per required depth and weightage to the topic in subject.
-If the information is not in the passages, state that and then use your own knowledge to answer.
+Your role is to:
+1. First check if the provided reference passages contain relevant information for the question.
+2. If they do, use that information as your primary source and combine it with your knowledge to provide a comprehensive answer.
+3. If they don't contain relevant information, use your own knowledge to provide a detailed answer instead of saying you cannot answer.
+4. When using information from Include all relevant information and specify the page numbers, line numbers, and PDF names where the information is found. If the answer requires additional knowledge beyond the provided context, provide relevant information or insights using your knowledge. Do not provide incorrect information.
+5. Always maintain an academic and informative tone.
+
+Remember: Maintain a formal and academic tone throughout your response which is also simple to understand and informative. Answer as per required depth and weightage to the topic in subject.
+You should ALWAYS provide a helpful answer. If the passages don't contain relevant information, use your general knowledge instead of saying you cannot answer.
 
 Chat History:
 {history_text}
@@ -150,8 +157,7 @@ Reference Passages:
 
 QUESTION: '{query}'
 
-ANSWER:
-"""
+ANSWER:"""
     return prompt
 
     # Initialize session state for the query input
@@ -176,15 +182,45 @@ ANSWER:
 
     selected_subject = subject_option if subject_option != "Create New Subject" else new_subject
 # Function to generate an answer using Gemini Pro API
+# @st.cache_data
+# def generate_answer(prompt: str):
+#     try:
+#         model = genai.GenerativeModel('gemini-pro')
+#         result = model.generate_content(prompt)
+#         return result.text
+#     except Exception as e:
+#         st.error(f"Error generating answer: {str(e)}")
+#         return None
 @st.cache_data
 def generate_answer(prompt: str):
     try:
         model = genai.GenerativeModel('gemini-pro')
-        result = model.generate_content(prompt)
+        
+        # Add safety options to ensure more complete responses
+        safety_settings = {
+            "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+            "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+            "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+            "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+        }
+        
+        generation_config = {
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "top_k": 40,
+            "max_output_tokens": 2048,
+        }
+        
+        result = model.generate_content(
+            prompt,
+            generation_config=generation_config,
+            safety_settings=safety_settings
+        )
         return result.text
     except Exception as e:
         st.error(f"Error generating answer: {str(e)}")
         return None
+
 
 # Function to generate an answer using LLM's knowledge
 def generate_llm_answer(query: str, subject: str = None, chat_history: List[Dict] = None):
@@ -322,16 +358,15 @@ if query:
         if selected_subject:
             relevant_texts = get_relevant_passage(query, selected_subject)
             chat_history = st.session_state.chat_histories.get(selected_subject, [])
-            # if relevant_texts:
-            #     final_prompt = make_rag_prompt(query, relevant_texts, selected_subject, chat_history)
-            #     answer = generate_answer(final_prompt)
-            # else:
-            #     st.info(f"No relevant information found in the {selected_subject} database. Using LLM's knowledge to answer.")
-            #     answer = generate_llm_answer(query, selected_subject, chat_history)
+            
+            # Always generate a response using the RAG prompt
             final_prompt = make_rag_prompt(query, relevant_texts, selected_subject, chat_history)
             answer = generate_answer(final_prompt)
+            
+            # Fallback to general knowledge if no answer is generated
+            if not answer or "unable to answer" in answer.lower() or "do not contain" in answer.lower():
+                answer = generate_llm_answer(query, selected_subject, chat_history)
         else:
-            st.info("No subject selected. Using general knowledge to answer.")
             answer = generate_llm_answer(query)
         
         if answer:
