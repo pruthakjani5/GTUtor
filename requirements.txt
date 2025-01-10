@@ -14,3 +14,4 @@ onnxruntime==1.17.3
 tokenizers==0.15.2
 sentence-transformers==3.0.1
 psutil==5.9.8
+sqlite3 >= 3.35.0
