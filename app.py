@@ -1,40 +1,175 @@
+# import streamlit as st
+# import requests
+# from pypdf import PdfReader
+# import shutil
+# import os
+# import google.generativeai as genai
+# import chromadb
+# from typing import List, Dict
+# from dotenv import load_dotenv
+# import tempfile
+# import json
+# import uuid
+# import clipboard
+# import markdown
+
+# # Load environment variables
+# load_dotenv()
+
+# # Set up Gemini API
+# gemini_api_key = os.environ.get("GEMINI_API_KEY")
+# if not gemini_api_key:
+#     raise ValueError("Gemini API Key not provided or incorrect. Please provide a valid GEMINI_API_KEY in .env file.")
+# genai.configure(api_key=gemini_api_key)
+
+# # Create a permanent directory for the databases and chat histories
+# #data_folder = os.path.join(os.path.expanduser("~"), "gtutor_data")
+# data_folder = os.path.join(os.getcwd(), "gtutor_data")
+# db_folder = os.path.join(data_folder, "dbs")
+# history_folder = os.path.join(data_folder, "chat_histories")
+# os.makedirs(db_folder, exist_ok=True)
+# os.makedirs(history_folder, exist_ok=True)
+
+# # File to store subject names
+# subjects_file = os.path.join(data_folder, "subjects.json")
+
+# # Load existing subjects
+# def load_subjects():
+#     if os.path.exists(subjects_file):
+#         with open(subjects_file, 'r') as f:
+#             return json.load(f)
+#     return []
+
+# # Save subjects
+# def save_subjects(subjects):
+#     with open(subjects_file, 'w') as f:
+#         json.dump(subjects, f)
+
+# # Load existing subjects
+# subjects = load_subjects()
+
+# # Initialize databases for existing subjects
+# dbs: Dict[str, chromadb.Collection] = {}
+
+# # Function to create or get a database for a subject
+# def get_or_create_db(subject):
+#     if subject not in dbs:
+#         subject_db_path = os.path.join(db_folder, subject.lower().replace(" ", "_"))
+#         os.makedirs(subject_db_path, exist_ok=True)
+#         chroma_client = chromadb.PersistentClient(path=subject_db_path)
+#         try:
+#             dbs[subject] = chroma_client.get_collection(name=subject)
+#         except ValueError:
+#             dbs[subject] = chroma_client.create_collection(name=subject)
+#     return dbs[subject]
+
+# # Function to load chat history for a subject
+# def load_chat_history(subject):
+#     history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
+#     if os.path.exists(history_file):
+#         with open(history_file, 'r') as f:
+#             return json.load(f)
+#     return []
+
+# # Function to save chat history for a subject
+# def save_chat_history(subject, history):
+#     history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
+#     with open(history_file, 'w') as f:
+#         json.dump(history, f)
+
+# # Function to download PDF from URL
+# def download_pdf(url):
+#     try:
+#         response = requests.get(url, timeout=10)
+#         response.raise_for_status()
+#         return response.content
+#     except requests.RequestException as e:
+#         st.error(f"Failed to download PDF from {url}. Error: {str(e)}")
+#         return None
+
+# # Function to extract text from PDF in chunks
+# def extract_text_from_pdf(pdf_content, chunk_size=1000):
+#     pdf_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+#     pdf_file.write(pdf_content)
+#     pdf_file.close()
+
+#     reader = PdfReader(pdf_file.name)
+#     total_pages = len(reader.pages)
+    
+#     for page_num in range(total_pages):
+#         page = reader.pages[page_num]
+#         text = page.extract_text()
+        
+#         # Split text into chunks
+#         chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+        
+#         for chunk in chunks:
+#             yield chunk, page_num
+
+#     os.unlink(pdf_file.name)
+
+# # Function to add document to the database
+# def add_document_to_db(pdf_content, source, subject):
+#     db = get_or_create_db(subject)
+#     chunk_generator = extract_text_from_pdf(pdf_content)
+    
+#     for i, (chunk, page_num) in enumerate(chunk_generator):
+#         unique_id = f"{source}_page{page_num}_chunk{i}"
+#         db.add(
+#             documents=[chunk],
+#             metadatas=[{"source": source, "page": page_num}],
+#             ids=[unique_id]
+#         )
+#     st.success(f"Successfully added {source} to the {subject} database.")
+
+# # Function to get relevant passages
+# def get_relevant_passage(query: str, subject: str, n_results: int = 5):
+#     # db = get_or_create_db(subject)
+#     # results = db.query(query_texts=[query], n_results=n_results)
+#     # return results['documents'][0]
+#     db = get_or_create_db(subject)
+#     results = db.query(query_texts=[query], n_results=n_results)
+#     return results['documents'][0] if results['documents'][0] else []
+
 import streamlit as st
 import requests
 from pypdf import PdfReader
-import shutil
 import os
 import google.generativeai as genai
-import chromadb
 from typing import List, Dict
 from dotenv import load_dotenv
 import tempfile
 import json
-import uuid
-import clipboard
 import markdown
+from streamlit_chromadb_connection import ChromadbConnection
 
 # Load environment variables
 load_dotenv()
 
+st.set_page_config(page_title="GTUtor", page_icon="🎓", layout="wide")
+
 # Set up Gemini API
 gemini_api_key = os.environ.get("GEMINI_API_KEY")
 if not gemini_api_key:
-    raise ValueError("Gemini API Key not provided or incorrect. Please provide a valid GEMINI_API_KEY in .env file.")
+    raise ValueError("Gemini API Key not provided. Please set GEMINI_API_KEY in your environment variables.")
 genai.configure(api_key=gemini_api_key)
 
-# Create a permanent directory for the databases and chat histories
-#data_folder = os.path.join(os.path.expanduser("~"), "gtutor_data")
-data_folder = os.path.join(os.getcwd(), "gtutor_data")
-db_folder = os.path.join(data_folder, "dbs")
-history_folder = os.path.join(data_folder, "chat_histories")
-os.makedirs(db_folder, exist_ok=True)
-os.makedirs(history_folder, exist_ok=True)
+# Initialize ChromaDB connection
+configuration = {
+    "client": "PersistentClient",
+    "path": "/tmp/.chroma"
+}
+
+# Create ChromaDB connection
+conn = st.connection("chromadb", type=ChromadbConnection, **configuration)
 
 # File to store subject names
-subjects_file = os.path.join(data_folder, "subjects.json")
+def get_subjects_file():
+    return "/tmp/subjects.json"
 
 # Load existing subjects
 def load_subjects():
+    subjects_file = get_subjects_file()
     if os.path.exists(subjects_file):
         with open(subjects_file, 'r') as f:
             return json.load(f)
@@ -42,38 +177,21 @@ def load_subjects():
 
 # Save subjects
 def save_subjects(subjects):
+    subjects_file = get_subjects_file()
     with open(subjects_file, 'w') as f:
         json.dump(subjects, f)
 
-# Load existing subjects
-subjects = load_subjects()
-
-# Initialize databases for existing subjects
-dbs: Dict[str, chromadb.Collection] = {}
-
-# Function to create or get a database for a subject
-def get_or_create_db(subject):
-    if subject not in dbs:
-        subject_db_path = os.path.join(db_folder, subject.lower().replace(" ", "_"))
-        os.makedirs(subject_db_path, exist_ok=True)
-        chroma_client = chromadb.PersistentClient(path=subject_db_path)
-        try:
-            dbs[subject] = chroma_client.get_collection(name=subject)
-        except ValueError:
-            dbs[subject] = chroma_client.create_collection(name=subject)
-    return dbs[subject]
-
-# Function to load chat history for a subject
+# Load chat history for a subject
 def load_chat_history(subject):
-    history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
+    history_file = f"/tmp/{subject.lower().replace(' ', '_')}_history.json"
     if os.path.exists(history_file):
         with open(history_file, 'r') as f:
             return json.load(f)
     return []
 
-# Function to save chat history for a subject
+# Save chat history for a subject
 def save_chat_history(subject, history):
-    history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
+    history_file = f"/tmp/{subject.lower().replace(' ', '_')}_history.json"
     with open(history_file, 'w') as f:
         json.dump(history, f)
 
@@ -93,43 +211,58 @@ def extract_text_from_pdf(pdf_content, chunk_size=1000):
     pdf_file.write(pdf_content)
     pdf_file.close()
 
-    reader = PdfReader(pdf_file.name)
-    total_pages = len(reader.pages)
+    chunks = []
+    try:
+        reader = PdfReader(pdf_file.name)
+        total_pages = len(reader.pages)
+        
+        for page_num in range(total_pages):
+            page = reader.pages[page_num]
+            text = page.extract_text()
+            
+            # Split text into chunks
+            text_chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+            chunks.extend([(chunk, page_num) for chunk in text_chunks])
+            
+    finally:
+        os.unlink(pdf_file.name)
     
-    for page_num in range(total_pages):
-        page = reader.pages[page_num]
-        text = page.extract_text()
-        
-        # Split text into chunks
-        chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
-        
-        for chunk in chunks:
-            yield chunk, page_num
-
-    os.unlink(pdf_file.name)
+    return chunks
 
 # Function to add document to the database
 def add_document_to_db(pdf_content, source, subject):
-    db = get_or_create_db(subject)
-    chunk_generator = extract_text_from_pdf(pdf_content)
+    collection_name = f"{subject.lower().replace(' ', '_')}_collection"
+    chunks = extract_text_from_pdf(pdf_content)
     
-    for i, (chunk, page_num) in enumerate(chunk_generator):
+    documents = []
+    metadatas = []
+    ids = []
+    
+    for i, (chunk, page_num) in enumerate(chunks):
         unique_id = f"{source}_page{page_num}_chunk{i}"
-        db.add(
-            documents=[chunk],
-            metadatas=[{"source": source, "page": page_num}],
-            ids=[unique_id]
-        )
+        documents.append(chunk)
+        metadatas.append({"source": source, "page": page_num})
+        ids.append(unique_id)
+    
+    conn.add(
+        collection_name=collection_name,
+        documents=documents,
+        metadatas=metadatas,
+        ids=ids
+    )
     st.success(f"Successfully added {source} to the {subject} database.")
 
 # Function to get relevant passages
-def get_relevant_passage(query: str, subject: str, n_results: int = 5):
-    # db = get_or_create_db(subject)
-    # results = db.query(query_texts=[query], n_results=n_results)
-    # return results['documents'][0]
-    db = get_or_create_db(subject)
-    results = db.query(query_texts=[query], n_results=n_results)
-    return results['documents'][0] if results['documents'][0] else []
+def get_relevant_passages(query: str, subject: str, n_results: int = 5):
+    collection_name = f"{subject.lower().replace(' ', '_')}_collection"
+    results = conn.query(
+        collection_name=collection_name,
+        query_texts=[query],
+        n_results=n_results
+    )
+    return results.get('documents', [[]])[0] if results else []
+
+# [Rest of the code continues with UI and Gemini functions...]
 
 # Function to construct the RAG prompt
 def make_rag_prompt(query: str, relevant_passages: List[str], subject: str, chat_history: List[Dict]):
