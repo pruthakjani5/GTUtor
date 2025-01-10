@@ -590,17 +590,29 @@ import requests
 from pypdf import PdfReader
 import os
 import google.generativeai as genai
-import chromadb
 from typing import List, Dict
 from dotenv import load_dotenv
 import tempfile
 import json
 import markdown
+import sys
+import importlib
 
 # Load environment variables
 load_dotenv()
 
+# Configure page
 st.set_page_config(page_title="GTUtor", page_icon="🎓", layout="wide")
+
+# SQLite version fix for ChromaDB
+try:
+    import pysqlite3
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass
+
+# Now import ChromaDB after SQLite fix
+import chromadb
 
 # Set up Gemini API
 gemini_api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
@@ -618,14 +630,12 @@ os.makedirs(history_folder, exist_ok=True)
 # File to store subject names
 subjects_file = os.path.join(data_folder, "subjects.json")
 
-# Load existing subjects
 def load_subjects():
     if os.path.exists(subjects_file):
         with open(subjects_file, 'r') as f:
             return json.load(f)
     return []
 
-# Save subjects
 def save_subjects(subjects):
     with open(subjects_file, 'w') as f:
         json.dump(subjects, f)
@@ -633,19 +643,18 @@ def save_subjects(subjects):
 # Initialize databases dictionary
 dbs = {}
 
-# Function to create or get a database for a subject
 def get_or_create_db(subject):
     if subject not in dbs:
         subject_db_path = os.path.join(db_folder, subject.lower().replace(" ", "_"))
         os.makedirs(subject_db_path, exist_ok=True)
-        chroma_client = chromadb.PersistentClient(path=subject_db_path)
         try:
+            chroma_client = chromadb.PersistentClient(path=subject_db_path)
             dbs[subject] = chroma_client.get_collection(name=subject)
-        except ValueError:
+        except (ValueError, chromadb.errors.CollectionNotFoundError):
+            chroma_client = chromadb.PersistentClient(path=subject_db_path)
             dbs[subject] = chroma_client.create_collection(name=subject)
     return dbs[subject]
 
-# Function to load chat history for a subject
 def load_chat_history(subject):
     history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
     if os.path.exists(history_file):
@@ -653,13 +662,11 @@ def load_chat_history(subject):
             return json.load(f)
     return []
 
-# Function to save chat history for a subject
 def save_chat_history(subject, history):
     history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
     with open(history_file, 'w') as f:
         json.dump(history, f)
 
-# Function to download PDF from URL
 def download_pdf(url):
     try:
         response = requests.get(url, timeout=10)
@@ -669,7 +676,6 @@ def download_pdf(url):
         st.error(f"Failed to download PDF from {url}. Error: {str(e)}")
         return None
 
-# Function to extract text from PDF in chunks
 def extract_text_from_pdf(pdf_content, chunk_size=1000):
     pdf_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     pdf_file.write(pdf_content)
@@ -686,35 +692,46 @@ def extract_text_from_pdf(pdf_content, chunk_size=1000):
             
             # Split text into chunks
             text_chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
-            chunks.extend([(chunk, page_num) for chunk in text_chunks])
+            chunks.extend([(chunk, page_num) for chunk in text_chunks if chunk.strip()])
             
     finally:
         os.unlink(pdf_file.name)
     
     return chunks
 
-# Function to add document to the database
 def add_document_to_db(pdf_content, source, subject):
     db = get_or_create_db(subject)
     chunks = extract_text_from_pdf(pdf_content)
     
+    if not chunks:
+        st.warning("No text content found in the PDF.")
+        return
+
     for i, (chunk, page_num) in enumerate(chunks):
         unique_id = f"{source}_page{page_num}_chunk{i}"
-        db.add(
-            documents=[chunk],
-            metadatas=[{"source": source, "page": page_num}],
-            ids=[unique_id]
-        )
+        try:
+            db.add(
+                documents=[chunk],
+                metadatas=[{"source": source, "page": page_num}],
+                ids=[unique_id]
+            )
+        except Exception as e:
+            st.error(f"Error adding chunk to database: {str(e)}")
+            continue
+    
     st.success(f"Successfully added {source} to the {subject} database.")
 
-# Function to get relevant passages
 def get_relevant_passages(query: str, subject: str, n_results: int = 5):
     db = get_or_create_db(subject)
-    results = db.query(
-        query_texts=[query],
-        n_results=n_results
-    )
-    return results['documents'][0] if results['documents'] else []
+    try:
+        results = db.query(
+            query_texts=[query],
+            n_results=n_results
+        )
+        return results['documents'][0] if results['documents'] else []
+    except Exception as e:
+        st.error(f"Error querying database: {str(e)}")
+        return []
 
 @st.cache_data
 def generate_answer(prompt: str):
@@ -737,7 +754,6 @@ def generate_answer(prompt: str):
         st.error(f"Error generating answer: {str(e)}")
         return None
 
-# Function to make RAG prompt
 def make_rag_prompt(query: str, relevant_passages: List[str], subject: str, chat_history: List[Dict]):
     passages_text = "\n".join(f"PASSAGE {i+1}: {p}" for i, p in enumerate(relevant_passages))
     history_text = "\n".join([f"Human: {turn['human']}\nAssistant: {turn['ai']}" for turn in chat_history[-5:]])
@@ -785,8 +801,12 @@ if selected_subject and selected_subject not in st.session_state.chat_histories:
 # File upload and URL input for the selected subject
 if selected_subject:
     st.subheader(f"Add Documents to {selected_subject}")
-    uploaded_file = st.file_uploader(f"Choose a PDF file for {selected_subject}", type="pdf")
-    pdf_url = st.text_input(f"Or enter a PDF URL for {selected_subject}")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        uploaded_file = st.file_uploader(f"Choose a PDF file for {selected_subject}", type="pdf")
+    with col2:
+        pdf_url = st.text_input(f"Or enter a PDF URL for {selected_subject}")
 
     if uploaded_file is not None:
         pdf_content = uploaded_file.read()
@@ -800,15 +820,16 @@ if selected_subject:
             with st.spinner("Processing PDF..."):
                 add_document_to_db(pdf_content, pdf_url, selected_subject)
 
-# Display chat interface
+# Chat interface
 if selected_subject:
     st.subheader(f"Chat with GTUtor - {selected_subject}")
     
-    # Display chat history
-    for turn in st.session_state.chat_histories.get(selected_subject, []):
-        st.markdown(f"**You:** {turn['human']}")
-        st.markdown(f"**GTUtor:** {turn['ai']}")
-        st.markdown("---")
+    chat_container = st.container()
+    with chat_container:
+        for turn in st.session_state.chat_histories.get(selected_subject, []):
+            st.markdown(f"**You:** {turn['human']}")
+            st.markdown(f"**GTUtor:** {markdown.markdown(turn['ai'])}")
+            st.markdown("---")
 
     # Query input
     query = st.text_input("Ask your question:")
@@ -823,7 +844,7 @@ if selected_subject:
             
             if answer:
                 st.markdown(f"**You:** {query}")
-                st.markdown(f"**GTUtor:** {answer}")
+                st.markdown(f"**GTUtor:** {markdown.markdown(answer)}")
                 
                 # Update chat history
                 st.session_state.chat_histories.setdefault(selected_subject, []).append({
@@ -847,9 +868,12 @@ if selected_subject:
     
     # Clear database button
     if st.sidebar.button("Clear Database"):
-        db.delete(delete_all=True)
-        st.success("Database cleared.")
-        st.rerun()
+        try:
+            db.delete(delete_all=True)
+            st.success("Database cleared.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error clearing database: {str(e)}")
 
 st.sidebar.markdown("""
 ## About GTUtor
