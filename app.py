@@ -1,40 +1,175 @@
+# # import streamlit as st
+# # import requests
+# # from pypdf import PdfReader
+# # import shutil
+# # import os
+# # import google.generativeai as genai
+# # import chromadb
+# # from typing import List, Dict
+# # from dotenv import load_dotenv
+# # import tempfile
+# # import json
+# # import uuid
+# # import clipboard
+# # import markdown
+
+# # # Load environment variables
+# # load_dotenv()
+
+# # # Set up Gemini API
+# # gemini_api_key = os.environ.get("GEMINI_API_KEY")
+# # if not gemini_api_key:
+# #     raise ValueError("Gemini API Key not provided or incorrect. Please provide a valid GEMINI_API_KEY in .env file.")
+# # genai.configure(api_key=gemini_api_key)
+
+# # # Create a permanent directory for the databases and chat histories
+# # #data_folder = os.path.join(os.path.expanduser("~"), "gtutor_data")
+# # data_folder = os.path.join(os.getcwd(), "gtutor_data")
+# # db_folder = os.path.join(data_folder, "dbs")
+# # history_folder = os.path.join(data_folder, "chat_histories")
+# # os.makedirs(db_folder, exist_ok=True)
+# # os.makedirs(history_folder, exist_ok=True)
+
+# # # File to store subject names
+# # subjects_file = os.path.join(data_folder, "subjects.json")
+
+# # # Load existing subjects
+# # def load_subjects():
+# #     if os.path.exists(subjects_file):
+# #         with open(subjects_file, 'r') as f:
+# #             return json.load(f)
+# #     return []
+
+# # # Save subjects
+# # def save_subjects(subjects):
+# #     with open(subjects_file, 'w') as f:
+# #         json.dump(subjects, f)
+
+# # # Load existing subjects
+# # subjects = load_subjects()
+
+# # # Initialize databases for existing subjects
+# # dbs: Dict[str, chromadb.Collection] = {}
+
+# # # Function to create or get a database for a subject
+# # def get_or_create_db(subject):
+# #     if subject not in dbs:
+# #         subject_db_path = os.path.join(db_folder, subject.lower().replace(" ", "_"))
+# #         os.makedirs(subject_db_path, exist_ok=True)
+# #         chroma_client = chromadb.PersistentClient(path=subject_db_path)
+# #         try:
+# #             dbs[subject] = chroma_client.get_collection(name=subject)
+# #         except ValueError:
+# #             dbs[subject] = chroma_client.create_collection(name=subject)
+# #     return dbs[subject]
+
+# # # Function to load chat history for a subject
+# # def load_chat_history(subject):
+# #     history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
+# #     if os.path.exists(history_file):
+# #         with open(history_file, 'r') as f:
+# #             return json.load(f)
+# #     return []
+
+# # # Function to save chat history for a subject
+# # def save_chat_history(subject, history):
+# #     history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
+# #     with open(history_file, 'w') as f:
+# #         json.dump(history, f)
+
+# # # Function to download PDF from URL
+# # def download_pdf(url):
+# #     try:
+# #         response = requests.get(url, timeout=10)
+# #         response.raise_for_status()
+# #         return response.content
+# #     except requests.RequestException as e:
+# #         st.error(f"Failed to download PDF from {url}. Error: {str(e)}")
+# #         return None
+
+# # # Function to extract text from PDF in chunks
+# # def extract_text_from_pdf(pdf_content, chunk_size=1000):
+# #     pdf_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+# #     pdf_file.write(pdf_content)
+# #     pdf_file.close()
+
+# #     reader = PdfReader(pdf_file.name)
+# #     total_pages = len(reader.pages)
+    
+# #     for page_num in range(total_pages):
+# #         page = reader.pages[page_num]
+# #         text = page.extract_text()
+        
+# #         # Split text into chunks
+# #         chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+        
+# #         for chunk in chunks:
+# #             yield chunk, page_num
+
+# #     os.unlink(pdf_file.name)
+
+# # # Function to add document to the database
+# # def add_document_to_db(pdf_content, source, subject):
+# #     db = get_or_create_db(subject)
+# #     chunk_generator = extract_text_from_pdf(pdf_content)
+    
+# #     for i, (chunk, page_num) in enumerate(chunk_generator):
+# #         unique_id = f"{source}_page{page_num}_chunk{i}"
+# #         db.add(
+# #             documents=[chunk],
+# #             metadatas=[{"source": source, "page": page_num}],
+# #             ids=[unique_id]
+# #         )
+# #     st.success(f"Successfully added {source} to the {subject} database.")
+
+# # # Function to get relevant passages
+# # def get_relevant_passage(query: str, subject: str, n_results: int = 5):
+# #     # db = get_or_create_db(subject)
+# #     # results = db.query(query_texts=[query], n_results=n_results)
+# #     # return results['documents'][0]
+# #     db = get_or_create_db(subject)
+# #     results = db.query(query_texts=[query], n_results=n_results)
+# #     return results['documents'][0] if results['documents'][0] else []
+
 # import streamlit as st
 # import requests
 # from pypdf import PdfReader
-# import shutil
 # import os
 # import google.generativeai as genai
-# import chromadb
 # from typing import List, Dict
 # from dotenv import load_dotenv
 # import tempfile
 # import json
-# import uuid
-# import clipboard
 # import markdown
+# from streamlit_chromadb_connection import ChromadbConnection
 
 # # Load environment variables
 # load_dotenv()
 
+# st.set_page_config(page_title="GTUtor", page_icon="🎓", layout="wide")
+
 # # Set up Gemini API
 # gemini_api_key = os.environ.get("GEMINI_API_KEY")
 # if not gemini_api_key:
-#     raise ValueError("Gemini API Key not provided or incorrect. Please provide a valid GEMINI_API_KEY in .env file.")
+#     raise ValueError("Gemini API Key not provided. Please set GEMINI_API_KEY in your environment variables.")
 # genai.configure(api_key=gemini_api_key)
 
-# # Create a permanent directory for the databases and chat histories
-# #data_folder = os.path.join(os.path.expanduser("~"), "gtutor_data")
-# data_folder = os.path.join(os.getcwd(), "gtutor_data")
-# db_folder = os.path.join(data_folder, "dbs")
-# history_folder = os.path.join(data_folder, "chat_histories")
-# os.makedirs(db_folder, exist_ok=True)
-# os.makedirs(history_folder, exist_ok=True)
+# # Initialize ChromaDB connection
+# configuration = {
+#     "client": "PersistentClient",
+#     "path": "/tmp/.chroma"
+# }
+
+# # Create ChromaDB connection
+# conn = st.connection("chromadb", type=ChromadbConnection, **configuration)
 
 # # File to store subject names
-# subjects_file = os.path.join(data_folder, "subjects.json")
+# def get_subjects_file():
+#     return "/tmp/subjects.json"
 
 # # Load existing subjects
 # def load_subjects():
+#     subjects_file = get_subjects_file()
 #     if os.path.exists(subjects_file):
 #         with open(subjects_file, 'r') as f:
 #             return json.load(f)
@@ -42,38 +177,21 @@
 
 # # Save subjects
 # def save_subjects(subjects):
+#     subjects_file = get_subjects_file()
 #     with open(subjects_file, 'w') as f:
 #         json.dump(subjects, f)
 
-# # Load existing subjects
-# subjects = load_subjects()
-
-# # Initialize databases for existing subjects
-# dbs: Dict[str, chromadb.Collection] = {}
-
-# # Function to create or get a database for a subject
-# def get_or_create_db(subject):
-#     if subject not in dbs:
-#         subject_db_path = os.path.join(db_folder, subject.lower().replace(" ", "_"))
-#         os.makedirs(subject_db_path, exist_ok=True)
-#         chroma_client = chromadb.PersistentClient(path=subject_db_path)
-#         try:
-#             dbs[subject] = chroma_client.get_collection(name=subject)
-#         except ValueError:
-#             dbs[subject] = chroma_client.create_collection(name=subject)
-#     return dbs[subject]
-
-# # Function to load chat history for a subject
+# # Load chat history for a subject
 # def load_chat_history(subject):
-#     history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
+#     history_file = f"/tmp/{subject.lower().replace(' ', '_')}_history.json"
 #     if os.path.exists(history_file):
 #         with open(history_file, 'r') as f:
 #             return json.load(f)
 #     return []
 
-# # Function to save chat history for a subject
+# # Save chat history for a subject
 # def save_chat_history(subject, history):
-#     history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
+#     history_file = f"/tmp/{subject.lower().replace(' ', '_')}_history.json"
 #     with open(history_file, 'w') as f:
 #         json.dump(history, f)
 
@@ -93,55 +211,391 @@
 #     pdf_file.write(pdf_content)
 #     pdf_file.close()
 
-#     reader = PdfReader(pdf_file.name)
-#     total_pages = len(reader.pages)
+#     chunks = []
+#     try:
+#         reader = PdfReader(pdf_file.name)
+#         total_pages = len(reader.pages)
+        
+#         for page_num in range(total_pages):
+#             page = reader.pages[page_num]
+#             text = page.extract_text()
+            
+#             # Split text into chunks
+#             text_chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+#             chunks.extend([(chunk, page_num) for chunk in text_chunks])
+            
+#     finally:
+#         os.unlink(pdf_file.name)
     
-#     for page_num in range(total_pages):
-#         page = reader.pages[page_num]
-#         text = page.extract_text()
-        
-#         # Split text into chunks
-#         chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
-        
-#         for chunk in chunks:
-#             yield chunk, page_num
-
-#     os.unlink(pdf_file.name)
+#     return chunks
 
 # # Function to add document to the database
 # def add_document_to_db(pdf_content, source, subject):
-#     db = get_or_create_db(subject)
-#     chunk_generator = extract_text_from_pdf(pdf_content)
+#     collection_name = f"{subject.lower().replace(' ', '_')}_collection"
+#     chunks = extract_text_from_pdf(pdf_content)
     
-#     for i, (chunk, page_num) in enumerate(chunk_generator):
+#     documents = []
+#     metadatas = []
+#     ids = []
+    
+#     for i, (chunk, page_num) in enumerate(chunks):
 #         unique_id = f"{source}_page{page_num}_chunk{i}"
-#         db.add(
-#             documents=[chunk],
-#             metadatas=[{"source": source, "page": page_num}],
-#             ids=[unique_id]
-#         )
+#         documents.append(chunk)
+#         metadatas.append({"source": source, "page": page_num})
+#         ids.append(unique_id)
+    
+#     conn.add(
+#         collection_name=collection_name,
+#         documents=documents,
+#         metadatas=metadatas,
+#         ids=ids
+#     )
 #     st.success(f"Successfully added {source} to the {subject} database.")
 
 # # Function to get relevant passages
-# def get_relevant_passage(query: str, subject: str, n_results: int = 5):
-#     # db = get_or_create_db(subject)
-#     # results = db.query(query_texts=[query], n_results=n_results)
-#     # return results['documents'][0]
-#     db = get_or_create_db(subject)
-#     results = db.query(query_texts=[query], n_results=n_results)
-#     return results['documents'][0] if results['documents'][0] else []
+# def get_relevant_passages(query: str, subject: str, n_results: int = 5):
+#     collection_name = f"{subject.lower().replace(' ', '_')}_collection"
+#     results = conn.query(
+#         collection_name=collection_name,
+#         query_texts=[query],
+#         n_results=n_results
+#     )
+#     return results.get('documents', [[]])[0] if results else []
+
+# # [Rest of the code continues with UI and Gemini functions...]
+
+# # Function to construct the RAG prompt
+# def make_rag_prompt(query: str, relevant_passages: List[str], subject: str, chat_history: List[Dict]):
+#     escaped_passages = [p.replace("'", "").replace('"', "").replace("\n", " ") for p in relevant_passages]
+#     passages_text = "\n".join(f"PASSAGE {i+1}: {p}" for i, p in enumerate(escaped_passages))
+    
+#     history_text = "\n".join([f"Human: {turn['human']}\nAssistant: {turn['ai']}" for turn in chat_history[-5:]])
+    
+#     prompt = f"""You are GTUtor, a helpful and informative AI assistant specializing in {subject} for GTU (Gujarat Technological University) students.
+# Your role is to:
+# 1. First check if the provided reference passages contain relevant information for the question.
+# 2. If they do, use that information as your primary source and combine it with your knowledge to provide a comprehensive answer.
+# 3. If they don't contain relevant information, use your own knowledge to provide a detailed answer instead of saying you cannot answer.
+# 4. When using information from Include all relevant information and specify the page numbers, line numbers, and PDF names where the information is found. If the answer requires additional knowledge beyond the provided context, provide relevant information or insights using your knowledge. Do not provide incorrect information.
+# 5. Always maintain an academic and informative tone.
+
+# Remember: Maintain a formal and academic tone throughout your response which is also simple to understand and informative. Answer as per required depth and weightage to the topic in subject.
+# You should ALWAYS provide a helpful answer. If the passages don't contain relevant information, use your general knowledge instead of saying you cannot answer.
+
+# Chat History:
+# {history_text}
+
+# Reference Passages:
+# {passages_text}
+
+# QUESTION: '{query}'
+
+# ANSWER:"""
+#     return prompt
+
+#     # Initialize session state for the query input
+#     if 'query' not in st.session_state:
+#         st.session_state.query = ""
+
+#     # Subject selection or creation
+#     previous_subject = st.session_state.get('previous_subject', '')
+#     subject_option = st.selectbox("Select a subject or create a new one", [""] + subjects + ["Create New Subject"])
+
+#     if subject_option != previous_subject:
+#         st.session_state.query = ""  # Clear the query when subject changes
+#         st.session_state.previous_subject = subject_option
+
+#     if subject_option == "Create New Subject":
+#         new_subject = st.text_input("Enter the name of the new subject")
+#         if new_subject and new_subject not in subjects:
+#             subjects.append(new_subject)
+#             save_subjects(subjects)
+#             st.success(f"New subject '{new_subject}' created successfully!")
+#             subject_option = new_subject
+
+#     selected_subject = subject_option if subject_option != "Create New Subject" else new_subject
+# # Function to generate an answer using Gemini Pro API
+# # @st.cache_data
+# # def generate_answer(prompt: str):
+# #     try:
+# #         model = genai.GenerativeModel('gemini-pro')
+# #         result = model.generate_content(prompt)
+# #         return result.text
+# #     except Exception as e:
+# #         st.error(f"Error generating answer: {str(e)}")
+# #         return None
+# @st.cache_data
+# def generate_answer(prompt: str):
+#     try:
+#         model = genai.GenerativeModel('gemini-pro')
+        
+#         # Add safety options to ensure more complete responses
+#         safety_settings = {
+#             "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+#             "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+#             "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+#             "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+#         }
+#         generation_config = {
+#             "temperature": 0.7,
+#             "top_p": 0.8,
+#             "top_k": 40,
+#             "max_output_tokens": 2048,
+#         }
+#         result = model.generate_content(
+#             prompt,
+#             generation_config=generation_config,
+#             safety_settings=safety_settings
+#         )
+#         return result.text
+#     except Exception as e:
+#         st.error(f"Error generating answer: {str(e)}")
+#         return None
+
+
+# # Function to generate an answer using LLM's knowledge
+# def generate_llm_answer(query: str, subject: str = None, chat_history: List[Dict] = None):
+#     history_text = "\n".join([f"Human: {turn['human']}\nAssistant: {turn['ai']}" for turn in (chat_history or [])[-5:]])
+    
+#     if subject:
+#         prompt = f"""You are GTUtor, a helpful and informative AI assistant specializing in {subject} for GTU (Gujarat Technological University) students. 
+# You have in-depth knowledge about GTU's curriculum and courses related to {subject}.
+# Please provide a comprehensive and informative answer to the following question, using your specialized knowledge and considering the chat history:
+
+# Chat History:
+# {history_text}
+
+# QUESTION: {query}
+
+# ANSWER:
+# """
+#     else:
+#         prompt = f"""You are GTUtor, a helpful and informative AI assistant for GTU (Gujarat Technological University) students. 
+# You have general knowledge about GTU's curriculum and various courses.
+# Please provide a comprehensive and informative answer to the following question, using your knowledge and considering the chat history:
+
+# Chat History:
+# {history_text}
+
+# QUESTION: {query}
+
+# ANSWER:
+# """
+#     return generate_answer(prompt)
+
+# # Streamlit UI
+
+# # # Initialize session state for chat history
+# if 'chat_histories' not in st.session_state:
+#     st.session_state.chat_histories = {}
+
+# st.markdown("""
+# <style>
+# .chat-message {
+#     padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; display: flex
+# }
+# .chat-message.user {
+#     background-color: #2b313e
+# }
+# .chat-message.bot {
+#     background-color: #475063
+# }
+# .chat-message .avatar {
+#   width: 20%;
+# }
+# .chat-message .avatar img {
+#   max-width: 78px;
+#   max-height: 78px;
+#   border-radius: 50%;
+#   object-fit: cover;
+# }
+# .chat-message .message {
+#   width: 80%;
+#   padding: 0 1.5rem;
+#   color: #fff;
+# }
+# .bot .message p {
+#     margin-bottom: 0.5rem;
+# }
+# .bot .message ul, .bot .message ol {
+#     margin-left: 1.5rem;
+# }
+# </style>
+# """, unsafe_allow_html=True)
+
+# st.title("GTUtor: Dynamic Multi-Subject Chat System")
+
+# # Subject selection or creation
+# subject_option = st.selectbox("Select a subject or create a new one", [""] + subjects + ["Create New Subject"])
+
+# if subject_option == "Create New Subject":
+#     new_subject = st.text_input("Enter the name of the new subject")
+#     if new_subject and new_subject not in subjects:
+#         subjects.append(new_subject)
+#         save_subjects(subjects)
+#         st.success(f"New subject '{new_subject}' created successfully!")
+#         subject_option = new_subject
+
+# selected_subject = subject_option if subject_option != "Create New Subject" else new_subject
+
+# # Load chat history for the selected subject
+# if selected_subject and selected_subject not in st.session_state.chat_histories:
+#     st.session_state.chat_histories[selected_subject] = load_chat_history(selected_subject)
+
+# # File upload and URL input for the selected subject
+# if selected_subject:
+#     st.subheader(f"Add Documents to {selected_subject}")
+#     uploaded_file = st.file_uploader(f"Choose a PDF file for {selected_subject} (max 10MB)", type="pdf")
+#     pdf_url = st.text_input(f"Or enter a PDF URL for {selected_subject}")
+
+#     if uploaded_file is not None:
+#         # Removed for now
+#         # if uploaded_file.size > 10 * 1024 * 1024:  # 10MB limit
+#         #     st.error("File size exceeds 10MB limit. Please upload a smaller file.")
+#         # else:
+#         pdf_content = uploaded_file.read()
+#         with st.spinner("Processing PDF..."):
+#             add_document_to_db(pdf_content, uploaded_file.name, selected_subject)
+
+#     elif pdf_url:
+#         with st.spinner("Downloading PDF..."):
+#             pdf_content = download_pdf(pdf_url)
+#         if pdf_content:
+#             with st.spinner("Processing PDF..."):
+#                 add_document_to_db(pdf_content, pdf_url, selected_subject)
+
+# # Display chat history with enhanced UI
+# if selected_subject:
+#     st.subheader(f"Chat History - {selected_subject}")
+#     for i, turn in enumerate(st.session_state.chat_histories.get(selected_subject, [])):
+#         # User message
+#         st.markdown(f'<div class="chat-message user"><div class="avatar"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRhCtDRFGo8W5fLw1wg12N0zHKONLsTXgY3Ko1MDaYBc2INdt3-EU1MGJR9Thaq9lzC730&usqp=CAU"/></div><div class="message">{turn["human"]}</div></div>', unsafe_allow_html=True)
+#         cols = st.columns([0.85, 0.15])
+#         cols[1].button("🗑️", key=f"delete_msg_{i}", on_click=lambda idx=i: delete_message(selected_subject, idx))
+        
+#         # Bot message (render as markdown)
+#         bot_message_html = markdown.markdown(turn["ai"])
+#         st.markdown(f'<div class="chat-message bot"><div class="avatar"><img src="https://img.freepik.com/premium-vector/ai-logo-template-vector-with-white-background_1023984-15069.jpg"/></div><div class="message">{bot_message_html}</div></div>', unsafe_allow_html=True)
+        
+#         # Copy buttons
+#         cols = st.columns(2)
+#         cols[0].button("Copy Question", key=f"copy_q_{i}", on_click=lambda q=turn["human"]: clipboard.copy(q))
+#         cols[1].button("Copy Answer", key=f"copy_a_{i}", on_click=lambda a=turn["ai"]: clipboard.copy(a))
+
+# # Query input
+# query = st.text_input("Enter your question")
+
+# if query:
+#     with st.spinner("Generating answer..."):
+#         if selected_subject:
+#             relevant_texts = get_relevant_passage(query, selected_subject)
+#             chat_history = st.session_state.chat_histories.get(selected_subject, [])
+            
+#             # Always generate a response using the RAG prompt
+#             final_prompt = make_rag_prompt(query, relevant_texts, selected_subject, chat_history)
+#             answer = generate_answer(final_prompt)
+            
+#             # Fallback to general knowledge if no answer is generated
+#             if not answer or "unable to answer" in answer.lower() or "do not contain" in answer.lower():
+#                 answer = generate_llm_answer(query, selected_subject, chat_history)
+#         else:
+#             answer = generate_llm_answer(query)
+        
+#         if answer:
+#         # Display the new conversation
+#             st.markdown(f'<div class="chat-message user"><div class="avatar"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRhCtDRFGo8W5fLw1wg12N0zHKONLsTXgY3Ko1MDaYBc2INdt3-EU1MGJR9Thaq9lzC730&usqp=CAU"/></div><div class="message">{query}</div></div>', unsafe_allow_html=True)
+#             answer_html = markdown.markdown(answer)
+#             st.markdown(f'<div class="chat-message bot"><div class="avatar"><img src="https://img.freepik.com/premium-vector/ai-logo-template-vector-with-white-background_1023984-15069.jpg"/></div><div class="message">{answer_html}</div></div>', unsafe_allow_html=True)
+            
+#             # Copy buttons for the new conversation
+#             cols = st.columns(2)
+#             cols[0].button("Copy Question", key="copy_current_q", on_click=lambda: clipboard.copy(query))
+#             cols[1].button("Copy Answer", key="copy_current_a", on_click=lambda: clipboard.copy(answer))
+            
+#             # Update chat history
+#             if selected_subject:
+#                 st.session_state.chat_histories.setdefault(selected_subject, []).append({
+#                     'human': query,
+#                     'ai': answer
+#                 })
+#                 save_chat_history(selected_subject, st.session_state.chat_histories[selected_subject])
+
+
+# # Sidebar information and buttons
+# st.sidebar.title("GTUtor Controls")
+
+# if selected_subject:
+#     db = get_or_create_db(selected_subject)
+#     total_docs = db.count()
+#     st.sidebar.write(f"Total documents in {selected_subject} database: {total_docs}")
+
+#     # Clear database button
+#     if st.sidebar.button(f"Clear {selected_subject} Database"):
+#         db.delete(delete_all=True)
+#         st.session_state.chat_histories[selected_subject] = []
+#         save_chat_history(selected_subject, [])
+#         st.sidebar.success(f"{selected_subject} database and chat history cleared successfully.")
+#         st.rerun()
+
+#     # Delete subject button
+#     if st.sidebar.button(f"Delete {selected_subject} Subject"):
+#         # Remove from subjects list
+#         subjects.remove(selected_subject)
+#         save_subjects(subjects)
+        
+#         # Delete database
+#         db_path = os.path.join(db_folder, selected_subject.lower().replace(" ", "_"))
+#         if os.path.exists(db_path):
+#             import shutil
+#             shutil.rmtree(db_path)
+        
+#         # Delete chat history
+#         if selected_subject in st.session_state.chat_histories:
+#             del st.session_state.chat_histories[selected_subject]
+#         history_file = os.path.join(history_folder, f"{selected_subject.lower().replace(' ', '_')}_history.json")
+#         if os.path.exists(history_file):
+#             os.remove(history_file)
+        
+#         st.sidebar.success(f"{selected_subject} subject deleted successfully.")
+#         st.rerun()
+
+# # Option to start a new conversation
+# if st.sidebar.button("Start New Conversation"):
+#     if selected_subject:
+#         st.session_state.chat_histories[selected_subject] = []
+#         save_chat_history(selected_subject, [])
+#         st.success("New conversation started.")
+#         st.rerun()
+#     else:
+#         st.warning("Please select a subject before starting a new conversation.")
+
+# # Function to delete a specific message
+# def delete_message(subject, index):
+#     if subject in st.session_state.chat_histories:
+#         del st.session_state.chat_histories[subject][index]
+#         save_chat_history(subject, st.session_state.chat_histories[subject])
+#         st.rerun()
+
+# # Add custom CSS to improve readability
+# st.markdown("""
+# <style>
+# .stTextArea textarea {
+#     font-size: 16px !important;
+# }
+# </style>
+# """, unsafe_allow_html=True)
 
 import streamlit as st
 import requests
 from pypdf import PdfReader
 import os
 import google.generativeai as genai
+import chromadb
 from typing import List, Dict
 from dotenv import load_dotenv
 import tempfile
 import json
 import markdown
-from streamlit_chromadb_connection import ChromadbConnection
 
 # Load environment variables
 load_dotenv()
@@ -149,27 +603,23 @@ load_dotenv()
 st.set_page_config(page_title="GTUtor", page_icon="🎓", layout="wide")
 
 # Set up Gemini API
-gemini_api_key = os.environ.get("GEMINI_API_KEY")
+gemini_api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not gemini_api_key:
-    raise ValueError("Gemini API Key not provided. Please set GEMINI_API_KEY in your environment variables.")
+    raise ValueError("Gemini API Key not provided. Please set GEMINI_API_KEY in your environment variables or Streamlit secrets.")
 genai.configure(api_key=gemini_api_key)
 
-# Initialize ChromaDB connection
-configuration = {
-    "client": "PersistentClient",
-    "path": "/tmp/.chroma"
-}
-
-# Create ChromaDB connection
-conn = st.connection("chromadb", type=ChromadbConnection, **configuration)
+# Create data directories in /tmp for Streamlit Cloud compatibility
+data_folder = "/tmp/gtutor_data"
+db_folder = os.path.join(data_folder, "dbs")
+history_folder = os.path.join(data_folder, "chat_histories")
+os.makedirs(db_folder, exist_ok=True)
+os.makedirs(history_folder, exist_ok=True)
 
 # File to store subject names
-def get_subjects_file():
-    return "/tmp/subjects.json"
+subjects_file = os.path.join(data_folder, "subjects.json")
 
 # Load existing subjects
 def load_subjects():
-    subjects_file = get_subjects_file()
     if os.path.exists(subjects_file):
         with open(subjects_file, 'r') as f:
             return json.load(f)
@@ -177,21 +627,35 @@ def load_subjects():
 
 # Save subjects
 def save_subjects(subjects):
-    subjects_file = get_subjects_file()
     with open(subjects_file, 'w') as f:
         json.dump(subjects, f)
 
-# Load chat history for a subject
+# Initialize databases dictionary
+dbs = {}
+
+# Function to create or get a database for a subject
+def get_or_create_db(subject):
+    if subject not in dbs:
+        subject_db_path = os.path.join(db_folder, subject.lower().replace(" ", "_"))
+        os.makedirs(subject_db_path, exist_ok=True)
+        chroma_client = chromadb.PersistentClient(path=subject_db_path)
+        try:
+            dbs[subject] = chroma_client.get_collection(name=subject)
+        except ValueError:
+            dbs[subject] = chroma_client.create_collection(name=subject)
+    return dbs[subject]
+
+# Function to load chat history for a subject
 def load_chat_history(subject):
-    history_file = f"/tmp/{subject.lower().replace(' ', '_')}_history.json"
+    history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
     if os.path.exists(history_file):
         with open(history_file, 'r') as f:
             return json.load(f)
     return []
 
-# Save chat history for a subject
+# Function to save chat history for a subject
 def save_chat_history(subject, history):
-    history_file = f"/tmp/{subject.lower().replace(' ', '_')}_history.json"
+    history_file = os.path.join(history_folder, f"{subject.lower().replace(' ', '_')}_history.json")
     with open(history_file, 'w') as f:
         json.dump(history, f)
 
@@ -231,56 +695,55 @@ def extract_text_from_pdf(pdf_content, chunk_size=1000):
 
 # Function to add document to the database
 def add_document_to_db(pdf_content, source, subject):
-    collection_name = f"{subject.lower().replace(' ', '_')}_collection"
+    db = get_or_create_db(subject)
     chunks = extract_text_from_pdf(pdf_content)
-    
-    documents = []
-    metadatas = []
-    ids = []
     
     for i, (chunk, page_num) in enumerate(chunks):
         unique_id = f"{source}_page{page_num}_chunk{i}"
-        documents.append(chunk)
-        metadatas.append({"source": source, "page": page_num})
-        ids.append(unique_id)
-    
-    conn.add(
-        collection_name=collection_name,
-        documents=documents,
-        metadatas=metadatas,
-        ids=ids
-    )
+        db.add(
+            documents=[chunk],
+            metadatas=[{"source": source, "page": page_num}],
+            ids=[unique_id]
+        )
     st.success(f"Successfully added {source} to the {subject} database.")
 
 # Function to get relevant passages
 def get_relevant_passages(query: str, subject: str, n_results: int = 5):
-    collection_name = f"{subject.lower().replace(' ', '_')}_collection"
-    results = conn.query(
-        collection_name=collection_name,
+    db = get_or_create_db(subject)
+    results = db.query(
         query_texts=[query],
         n_results=n_results
     )
-    return results.get('documents', [[]])[0] if results else []
+    return results['documents'][0] if results['documents'] else []
 
-# [Rest of the code continues with UI and Gemini functions...]
+@st.cache_data
+def generate_answer(prompt: str):
+    try:
+        model = genai.GenerativeModel('gemini-pro')
+        
+        generation_config = {
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "top_k": 40,
+            "max_output_tokens": 2048,
+        }
+        
+        result = model.generate_content(
+            prompt,
+            generation_config=generation_config
+        )
+        return result.text
+    except Exception as e:
+        st.error(f"Error generating answer: {str(e)}")
+        return None
 
-# Function to construct the RAG prompt
+# Function to make RAG prompt
 def make_rag_prompt(query: str, relevant_passages: List[str], subject: str, chat_history: List[Dict]):
-    escaped_passages = [p.replace("'", "").replace('"', "").replace("\n", " ") for p in relevant_passages]
-    passages_text = "\n".join(f"PASSAGE {i+1}: {p}" for i, p in enumerate(escaped_passages))
-    
+    passages_text = "\n".join(f"PASSAGE {i+1}: {p}" for i, p in enumerate(relevant_passages))
     history_text = "\n".join([f"Human: {turn['human']}\nAssistant: {turn['ai']}" for turn in chat_history[-5:]])
     
     prompt = f"""You are GTUtor, a helpful and informative AI assistant specializing in {subject} for GTU (Gujarat Technological University) students.
-Your role is to:
-1. First check if the provided reference passages contain relevant information for the question.
-2. If they do, use that information as your primary source and combine it with your knowledge to provide a comprehensive answer.
-3. If they don't contain relevant information, use your own knowledge to provide a detailed answer instead of saying you cannot answer.
-4. When using information from Include all relevant information and specify the page numbers, line numbers, and PDF names where the information is found. If the answer requires additional knowledge beyond the provided context, provide relevant information or insights using your knowledge. Do not provide incorrect information.
-5. Always maintain an academic and informative tone.
-
-Remember: Maintain a formal and academic tone throughout your response which is also simple to understand and informative. Answer as per required depth and weightage to the topic in subject.
-You should ALWAYS provide a helpful answer. If the passages don't contain relevant information, use your general knowledge instead of saying you cannot answer.
+Your role is to provide comprehensive answers using the provided reference passages and your knowledge.
 
 Chat History:
 {history_text}
@@ -293,135 +756,12 @@ QUESTION: '{query}'
 ANSWER:"""
     return prompt
 
-    # Initialize session state for the query input
-    if 'query' not in st.session_state:
-        st.session_state.query = ""
-
-    # Subject selection or creation
-    previous_subject = st.session_state.get('previous_subject', '')
-    subject_option = st.selectbox("Select a subject or create a new one", [""] + subjects + ["Create New Subject"])
-
-    if subject_option != previous_subject:
-        st.session_state.query = ""  # Clear the query when subject changes
-        st.session_state.previous_subject = subject_option
-
-    if subject_option == "Create New Subject":
-        new_subject = st.text_input("Enter the name of the new subject")
-        if new_subject and new_subject not in subjects:
-            subjects.append(new_subject)
-            save_subjects(subjects)
-            st.success(f"New subject '{new_subject}' created successfully!")
-            subject_option = new_subject
-
-    selected_subject = subject_option if subject_option != "Create New Subject" else new_subject
-# Function to generate an answer using Gemini Pro API
-# @st.cache_data
-# def generate_answer(prompt: str):
-#     try:
-#         model = genai.GenerativeModel('gemini-pro')
-#         result = model.generate_content(prompt)
-#         return result.text
-#     except Exception as e:
-#         st.error(f"Error generating answer: {str(e)}")
-#         return None
-@st.cache_data
-def generate_answer(prompt: str):
-    try:
-        model = genai.GenerativeModel('gemini-pro')
-        
-        # Add safety options to ensure more complete responses
-        safety_settings = {
-            "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
-            "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
-            "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
-            "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
-        }
-        generation_config = {
-            "temperature": 0.7,
-            "top_p": 0.8,
-            "top_k": 40,
-            "max_output_tokens": 2048,
-        }
-        result = model.generate_content(
-            prompt,
-            generation_config=generation_config,
-            safety_settings=safety_settings
-        )
-        return result.text
-    except Exception as e:
-        st.error(f"Error generating answer: {str(e)}")
-        return None
-
-
-# Function to generate an answer using LLM's knowledge
-def generate_llm_answer(query: str, subject: str = None, chat_history: List[Dict] = None):
-    history_text = "\n".join([f"Human: {turn['human']}\nAssistant: {turn['ai']}" for turn in (chat_history or [])[-5:]])
-    
-    if subject:
-        prompt = f"""You are GTUtor, a helpful and informative AI assistant specializing in {subject} for GTU (Gujarat Technological University) students. 
-You have in-depth knowledge about GTU's curriculum and courses related to {subject}.
-Please provide a comprehensive and informative answer to the following question, using your specialized knowledge and considering the chat history:
-
-Chat History:
-{history_text}
-
-QUESTION: {query}
-
-ANSWER:
-"""
-    else:
-        prompt = f"""You are GTUtor, a helpful and informative AI assistant for GTU (Gujarat Technological University) students. 
-You have general knowledge about GTU's curriculum and various courses.
-Please provide a comprehensive and informative answer to the following question, using your knowledge and considering the chat history:
-
-Chat History:
-{history_text}
-
-QUESTION: {query}
-
-ANSWER:
-"""
-    return generate_answer(prompt)
-
-# Streamlit UI
-
-# # Initialize session state for chat history
+# Initialize session state
 if 'chat_histories' not in st.session_state:
     st.session_state.chat_histories = {}
 
-st.markdown("""
-<style>
-.chat-message {
-    padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; display: flex
-}
-.chat-message.user {
-    background-color: #2b313e
-}
-.chat-message.bot {
-    background-color: #475063
-}
-.chat-message .avatar {
-  width: 20%;
-}
-.chat-message .avatar img {
-  max-width: 78px;
-  max-height: 78px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-.chat-message .message {
-  width: 80%;
-  padding: 0 1.5rem;
-  color: #fff;
-}
-.bot .message p {
-    margin-bottom: 0.5rem;
-}
-.bot .message ul, .bot .message ol {
-    margin-left: 1.5rem;
-}
-</style>
-""", unsafe_allow_html=True)
+# Load existing subjects
+subjects = load_subjects()
 
 st.title("GTUtor: Dynamic Multi-Subject Chat System")
 
@@ -445,14 +785,10 @@ if selected_subject and selected_subject not in st.session_state.chat_histories:
 # File upload and URL input for the selected subject
 if selected_subject:
     st.subheader(f"Add Documents to {selected_subject}")
-    uploaded_file = st.file_uploader(f"Choose a PDF file for {selected_subject} (max 10MB)", type="pdf")
+    uploaded_file = st.file_uploader(f"Choose a PDF file for {selected_subject}", type="pdf")
     pdf_url = st.text_input(f"Or enter a PDF URL for {selected_subject}")
 
     if uploaded_file is not None:
-        # Removed for now
-        # if uploaded_file.size > 10 * 1024 * 1024:  # 10MB limit
-        #     st.error("File size exceeds 10MB limit. Please upload a smaller file.")
-        # else:
         pdf_content = uploaded_file.read()
         with st.spinner("Processing PDF..."):
             add_document_to_db(pdf_content, uploaded_file.name, selected_subject)
@@ -464,123 +800,64 @@ if selected_subject:
             with st.spinner("Processing PDF..."):
                 add_document_to_db(pdf_content, pdf_url, selected_subject)
 
-# Display chat history with enhanced UI
+# Display chat interface
 if selected_subject:
-    st.subheader(f"Chat History - {selected_subject}")
-    for i, turn in enumerate(st.session_state.chat_histories.get(selected_subject, [])):
-        # User message
-        st.markdown(f'<div class="chat-message user"><div class="avatar"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRhCtDRFGo8W5fLw1wg12N0zHKONLsTXgY3Ko1MDaYBc2INdt3-EU1MGJR9Thaq9lzC730&usqp=CAU"/></div><div class="message">{turn["human"]}</div></div>', unsafe_allow_html=True)
-        cols = st.columns([0.85, 0.15])
-        cols[1].button("🗑️", key=f"delete_msg_{i}", on_click=lambda idx=i: delete_message(selected_subject, idx))
-        
-        # Bot message (render as markdown)
-        bot_message_html = markdown.markdown(turn["ai"])
-        st.markdown(f'<div class="chat-message bot"><div class="avatar"><img src="https://img.freepik.com/premium-vector/ai-logo-template-vector-with-white-background_1023984-15069.jpg"/></div><div class="message">{bot_message_html}</div></div>', unsafe_allow_html=True)
-        
-        # Copy buttons
-        cols = st.columns(2)
-        cols[0].button("Copy Question", key=f"copy_q_{i}", on_click=lambda q=turn["human"]: clipboard.copy(q))
-        cols[1].button("Copy Answer", key=f"copy_a_{i}", on_click=lambda a=turn["ai"]: clipboard.copy(a))
+    st.subheader(f"Chat with GTUtor - {selected_subject}")
+    
+    # Display chat history
+    for turn in st.session_state.chat_histories.get(selected_subject, []):
+        st.markdown(f"**You:** {turn['human']}")
+        st.markdown(f"**GTUtor:** {turn['ai']}")
+        st.markdown("---")
 
-# Query input
-query = st.text_input("Enter your question")
+    # Query input
+    query = st.text_input("Ask your question:")
 
-if query:
-    with st.spinner("Generating answer..."):
-        if selected_subject:
-            relevant_texts = get_relevant_passage(query, selected_subject)
+    if query:
+        with st.spinner("Generating answer..."):
+            relevant_texts = get_relevant_passages(query, selected_subject)
             chat_history = st.session_state.chat_histories.get(selected_subject, [])
             
-            # Always generate a response using the RAG prompt
-            final_prompt = make_rag_prompt(query, relevant_texts, selected_subject, chat_history)
-            answer = generate_answer(final_prompt)
+            prompt = make_rag_prompt(query, relevant_texts, selected_subject, chat_history)
+            answer = generate_answer(prompt)
             
-            # Fallback to general knowledge if no answer is generated
-            if not answer or "unable to answer" in answer.lower() or "do not contain" in answer.lower():
-                answer = generate_llm_answer(query, selected_subject, chat_history)
-        else:
-            answer = generate_llm_answer(query)
-        
-        if answer:
-        # Display the new conversation
-            st.markdown(f'<div class="chat-message user"><div class="avatar"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRhCtDRFGo8W5fLw1wg12N0zHKONLsTXgY3Ko1MDaYBc2INdt3-EU1MGJR9Thaq9lzC730&usqp=CAU"/></div><div class="message">{query}</div></div>', unsafe_allow_html=True)
-            answer_html = markdown.markdown(answer)
-            st.markdown(f'<div class="chat-message bot"><div class="avatar"><img src="https://img.freepik.com/premium-vector/ai-logo-template-vector-with-white-background_1023984-15069.jpg"/></div><div class="message">{answer_html}</div></div>', unsafe_allow_html=True)
-            
-            # Copy buttons for the new conversation
-            cols = st.columns(2)
-            cols[0].button("Copy Question", key="copy_current_q", on_click=lambda: clipboard.copy(query))
-            cols[1].button("Copy Answer", key="copy_current_a", on_click=lambda: clipboard.copy(answer))
-            
-            # Update chat history
-            if selected_subject:
+            if answer:
+                st.markdown(f"**You:** {query}")
+                st.markdown(f"**GTUtor:** {answer}")
+                
+                # Update chat history
                 st.session_state.chat_histories.setdefault(selected_subject, []).append({
                     'human': query,
                     'ai': answer
                 })
                 save_chat_history(selected_subject, st.session_state.chat_histories[selected_subject])
 
-
-# Sidebar information and buttons
-st.sidebar.title("GTUtor Controls")
+# Sidebar
+st.sidebar.title("🎓 GTUtor Controls")
 
 if selected_subject:
     db = get_or_create_db(selected_subject)
-    total_docs = db.count()
-    st.sidebar.write(f"Total documents in {selected_subject} database: {total_docs}")
-
+    
+    # Clear conversation button
+    if st.sidebar.button("Clear Conversation"):
+        st.session_state.chat_histories[selected_subject] = []
+        save_chat_history(selected_subject, [])
+        st.success("Conversation cleared.")
+        st.rerun()
+    
     # Clear database button
-    if st.sidebar.button(f"Clear {selected_subject} Database"):
+    if st.sidebar.button("Clear Database"):
         db.delete(delete_all=True)
-        st.session_state.chat_histories[selected_subject] = []
-        save_chat_history(selected_subject, [])
-        st.sidebar.success(f"{selected_subject} database and chat history cleared successfully.")
+        st.success("Database cleared.")
         st.rerun()
 
-    # Delete subject button
-    if st.sidebar.button(f"Delete {selected_subject} Subject"):
-        # Remove from subjects list
-        subjects.remove(selected_subject)
-        save_subjects(subjects)
-        
-        # Delete database
-        db_path = os.path.join(db_folder, selected_subject.lower().replace(" ", "_"))
-        if os.path.exists(db_path):
-            import shutil
-            shutil.rmtree(db_path)
-        
-        # Delete chat history
-        if selected_subject in st.session_state.chat_histories:
-            del st.session_state.chat_histories[selected_subject]
-        history_file = os.path.join(history_folder, f"{selected_subject.lower().replace(' ', '_')}_history.json")
-        if os.path.exists(history_file):
-            os.remove(history_file)
-        
-        st.sidebar.success(f"{selected_subject} subject deleted successfully.")
-        st.rerun()
+st.sidebar.markdown("""
+## About GTUtor
+GTUtor is an AI-powered study companion designed for GTU students. Upload your study materials and get instant, accurate answers to your questions!
 
-# Option to start a new conversation
-if st.sidebar.button("Start New Conversation"):
-    if selected_subject:
-        st.session_state.chat_histories[selected_subject] = []
-        save_chat_history(selected_subject, [])
-        st.success("New conversation started.")
-        st.rerun()
-    else:
-        st.warning("Please select a subject before starting a new conversation.")
-
-# Function to delete a specific message
-def delete_message(subject, index):
-    if subject in st.session_state.chat_histories:
-        del st.session_state.chat_histories[subject][index]
-        save_chat_history(subject, st.session_state.chat_histories[subject])
-        st.rerun()
-
-# Add custom CSS to improve readability
-st.markdown("""
-<style>
-.stTextArea textarea {
-    font-size: 16px !important;
-}
-</style>
-""", unsafe_allow_html=True)
+### Features:
+- 📚 Multi-subject support
+- 🔍 Smart document analysis
+- 💡 Contextual answers
+- 📝 Chat history tracking
+""")
